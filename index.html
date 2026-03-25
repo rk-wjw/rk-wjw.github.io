@@ -5,7 +5,7 @@
   <meta http-equiv="X-UA-Compatible" content="IE=edge" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>你的名字 | 个人主页</title>
-  <meta name="description" content="这里是你的个人主页，展示个人介绍、项目经历与联系方式。" />
+  <meta name="description" content="这里是你的个人主页，展示个人介绍、近期前端资讯与联系方式。" />
   <style>
     :root {
       --bg: #f8fafc;
@@ -14,6 +14,7 @@
       --muted: #475569;
       --brand: #2563eb;
       --line: #e2e8f0;
+      --ok: #16a34a;
     }
 
     * { box-sizing: border-box; }
@@ -110,14 +111,63 @@
 
     .muted { color: var(--muted); }
 
-    ul { margin: 8px 0 0 18px; }
+    .news-meta {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 10px;
+      color: var(--muted);
+      font-size: 13px;
+      margin-bottom: 8px;
+    }
 
-    .project {
-      border: 1px dashed var(--line);
-      border-radius: 10px;
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--ok);
+      display: inline-block;
+    }
+
+    .news-summary {
+      margin: 12px 0 8px;
       padding: 12px;
-      margin-top: 10px;
+      border-radius: 10px;
+      border: 1px dashed var(--line);
       background: #fcfdff;
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    .news-list {
+      list-style: none;
+      margin: 0;
+      padding: 0;
+      display: grid;
+      gap: 10px;
+    }
+
+    .news-item {
+      border: 1px solid var(--line);
+      border-radius: 10px;
+      padding: 10px 12px;
+      background: #fff;
+    }
+
+    .news-item a {
+      color: var(--text);
+      text-decoration: none;
+      font-weight: 600;
+    }
+
+    .news-item a:hover {
+      color: var(--brand);
+    }
+
+    .news-item small {
+      color: var(--muted);
+      display: block;
+      margin-top: 4px;
     }
 
     footer {
@@ -125,17 +175,6 @@
       color: var(--muted);
       font-size: 13px;
       padding: 26px 0 12px;
-    }
-
-    @media (min-width: 860px) {
-      .grid {
-        grid-template-columns: 1fr 1fr;
-      }
-
-      .grid .card:first-child,
-      .grid .card:last-child {
-        grid-column: 1 / -1;
-      }
     }
   </style>
 </head>
@@ -145,8 +184,7 @@
       <div class="logo">你的名字</div>
       <nav>
         <a href="#about">关于</a>
-        <a href="#skills">能力</a>
-        <a href="#projects">项目</a>
+        <a href="#news">前端资讯</a>
         <a href="#contact">联系</a>
       </nav>
     </div>
@@ -167,33 +205,14 @@
         </p>
       </article>
 
-      <article id="skills" class="card">
-        <h2>🧩 核心能力</h2>
-        <ul>
-          <li>技能 1（例如：JavaScript / TypeScript）</li>
-          <li>技能 2（例如：React / Vue）</li>
-          <li>技能 3（例如：Node.js / Python）</li>
-          <li>技能 4（例如：产品设计 / 数据分析）</li>
-        </ul>
-      </article>
-
-      <article id="projects" class="card">
-        <h2>🚀 代表项目</h2>
-
-        <div class="project">
-          <strong>项目 A（名称）</strong>
-          <p class="muted">一句话项目描述 + 你的职责 + 实际效果（可量化）。</p>
+      <article id="news" class="card">
+        <h2>🗞️ 近期前端领域资讯快速概览</h2>
+        <div class="news-meta">
+          <span><span class="status-dot"></span> 自动汇总已开启</span>
+          <span id="newsUpdatedAt">正在获取最新资讯...</span>
         </div>
-
-        <div class="project">
-          <strong>项目 B（名称）</strong>
-          <p class="muted">一句话项目描述 + 你的职责 + 实际效果（可量化）。</p>
-        </div>
-
-        <div class="project">
-          <strong>项目 C（名称）</strong>
-          <p class="muted">一句话项目描述 + 你的职责 + 实际效果（可量化）。</p>
-        </div>
+        <div id="newsSummary" class="news-summary">正在整理近期开源社区与前端媒体动态...</div>
+        <ul id="newsList" class="news-list"></ul>
       </article>
 
       <article id="contact" class="card">
@@ -211,6 +230,134 @@
 
   <script>
     document.getElementById('year').textContent = String(new Date().getFullYear());
+
+    const NEWS_CACHE_KEY = 'frontend_news_digest_v1';
+    const REFRESH_INTERVAL = 1000 * 60 * 60 * 6;
+    const FEED_APIS = [
+      {
+        source: 'web.dev',
+        url: 'https://api.rss2json.com/v1/api.json?rss_url=' + encodeURIComponent('https://web.dev/feed.xml')
+      },
+      {
+        source: 'CSS-Tricks',
+        url: 'https://api.rss2json.com/v1/api.json?rss_url=' + encodeURIComponent('https://css-tricks.com/feed/')
+      },
+      {
+        source: 'Smashing Magazine',
+        url: 'https://api.rss2json.com/v1/api.json?rss_url=' + encodeURIComponent('https://www.smashingmagazine.com/feed/')
+      }
+    ];
+
+    function formatDate(dateString) {
+      const d = new Date(dateString);
+      if (Number.isNaN(d.getTime())) return '未知时间';
+      return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+    }
+
+    function buildSummary(items) {
+      const focusMap = {
+        'react': 'React 生态',
+        'vue': 'Vue 生态',
+        'typescript': 'TypeScript',
+        'css': 'CSS 与样式工程',
+        'performance': '性能优化',
+        'ai': 'AI + 前端工具链',
+        'browser': '浏览器能力',
+        'web': 'Web 平台特性'
+      };
+      const score = {};
+      items.forEach((item) => {
+        const title = item.title.toLowerCase();
+        Object.entries(focusMap).forEach(([keyword, topic]) => {
+          if (title.includes(keyword)) {
+            score[topic] = (score[topic] || 0) + 1;
+          }
+        });
+      });
+
+      const topTopics = Object.entries(score)
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, 3)
+        .map(([topic, count]) => `${topic}（${count}）`);
+
+      if (!topTopics.length) {
+        return '过去一段时间的前端资讯较分散，重点可关注：Web 平台能力更新、工程化提效和框架最佳实践。';
+      }
+
+      return `最近前端内容热点集中在：${topTopics.join('、')}。建议每周固定回顾一次，持续跟进技术趋势。`;
+    }
+
+    function renderNews(payload) {
+      const updatedAtEl = document.getElementById('newsUpdatedAt');
+      const summaryEl = document.getElementById('newsSummary');
+      const listEl = document.getElementById('newsList');
+      listEl.innerHTML = '';
+
+      summaryEl.textContent = payload.summary;
+      updatedAtEl.textContent = `最近更新：${formatDate(payload.updatedAt)}（每 6 小时自动刷新）`;
+
+      payload.items.forEach((item) => {
+        const li = document.createElement('li');
+        li.className = 'news-item';
+        li.innerHTML = `
+          <a href="${item.link}" target="_blank" rel="noopener noreferrer">${item.title}</a>
+          <small>${item.source} · ${formatDate(item.pubDate)}</small>
+        `;
+        listEl.appendChild(li);
+      });
+    }
+
+    async function fetchFeed(feed) {
+      const response = await fetch(feed.url);
+      if (!response.ok) throw new Error(feed.source + ' 拉取失败');
+      const data = await response.json();
+      return (data.items || []).slice(0, 6).map((item) => ({
+        title: item.title,
+        link: item.link,
+        pubDate: item.pubDate,
+        source: feed.source
+      }));
+    }
+
+    async function updateFrontendNews(force = false) {
+      const cached = localStorage.getItem(NEWS_CACHE_KEY);
+      if (!force && cached) {
+        const parsed = JSON.parse(cached);
+        if (Date.now() - parsed.timestamp < REFRESH_INTERVAL) {
+          renderNews(parsed);
+          return;
+        }
+      }
+
+      try {
+        const results = await Promise.all(FEED_APIS.map(fetchFeed));
+        const items = results
+          .flat()
+          .sort((a, b) => new Date(b.pubDate).getTime() - new Date(a.pubDate).getTime())
+          .slice(0, 8);
+
+        const payload = {
+          timestamp: Date.now(),
+          updatedAt: new Date().toISOString(),
+          summary: buildSummary(items),
+          items
+        };
+
+        localStorage.setItem(NEWS_CACHE_KEY, JSON.stringify(payload));
+        renderNews(payload);
+      } catch (error) {
+        const backup = cached ? JSON.parse(cached) : null;
+        if (backup) {
+          renderNews(backup);
+          document.getElementById('newsUpdatedAt').textContent += '（当前使用缓存）';
+        } else {
+          document.getElementById('newsSummary').textContent = '资讯抓取暂时不可用，请稍后刷新页面重试。';
+          document.getElementById('newsUpdatedAt').textContent = '状态：暂时无法更新';
+        }
+      }
+    }
+
+    updateFrontendNews();
   </script>
 </body>
 </html>
